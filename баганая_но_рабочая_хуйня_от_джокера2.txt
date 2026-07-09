@@ -1,0 +1,281 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/fleksmi-bot/Library2/refs/heads/main/Library1.lua"))()
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local RS = ReplicatedStorage
+
+local Window = Library:CreateWindow({
+    Title = "Joker",
+    Theme = "Void",
+    ToggleKey = Enum.KeyCode.RightShift,
+    ShowWatermark = { Enabled = true, Title = true, User = false, FPS = true, Duration = false, Ping = true, Time= false },
+	AutoSave = true,
+	ConfigFolder = "Fling_config"
+})
+
+local MainTab = Window:CreateTab("Main", true)
+local DefenseTab = Window:CreateTab("Defense", true)
+
+local GrabBlock = MainTab:CreateBlock({Name = "Spam Grab", Side = "Left"})
+local TargetBlock = MainTab:CreateBlock({Name = "Target", Side = "Left"})
+local SettingsBlock = MainTab:CreateBlock({Name = "Settings", Side = "Left"})
+local AntiGrabBlock = DefenseTab:CreateBlock({Name = "Anti-Grab", Side = "Left"})
+
+local GrabEvents = RS:WaitForChild("GrabEvents")
+local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
+local DestroyGrabLine = GrabEvents:WaitForChild("DestroyGrabLine")
+local CreateGrabLine = GrabEvents:WaitForChild("CreateGrabLine")
+local isHeld = LocalPlayer:WaitForChild("IsHeld")
+local struggleEvent = RS:WaitForChild("CharacterEvents"):WaitForChild("Struggle")
+local ragdollRemote = RS:WaitForChild("CharacterEvents"):WaitForChild("RagdollRemote")
+
+local selectedTarget = nil
+local spamGrabEnabled = false
+local antiGrabEnabled = false
+local spamTask = nil
+local antiGrabTask = nil
+local holdHeight = 15
+local grabInterval = 0.01
+
+local targetNames = {}
+local function updateList()
+    targetNames = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(targetNames, p.Name)
+        end
+    end
+end
+
+local TargetDropdown = TargetBlock:CreateDropdown({
+    Name = "Select Target",
+    Options = targetNames,
+    Callback = function(v)
+        selectedTarget = Players:FindFirstChild(v)
+    end
+})
+
+TargetBlock:CreateButton({
+    Name = "Refresh List",
+    Callback = function()
+        updateList()
+        TargetDropdown:Refresh(targetNames, true)
+    end
+})
+
+local function SpamGrabLoop()
+    local myChar = LocalPlayer.Character
+    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local targetChar = selectedTarget and selectedTarget.Character
+    local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    
+    if not myHrp or not targetHrp then 
+        Library:Notify({ Title = "Error", Content = "Target not found", Duration = 3 })
+        return 
+    end
+    
+    local originalCFrame = myHrp.CFrame
+    myHrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 3)
+    task.wait(0.1)
+    
+    for i = 1, 10 do
+        pcall(function()
+            SetNetworkOwner:FireServer(targetHrp, targetHrp.CFrame)
+            DestroyGrabLine:FireServer(targetHrp)
+            CreateGrabLine:FireServer(targetHrp, Vector3.zero, targetHrp.Position, false)
+        end)
+        task.wait()
+    end
+    
+    myHrp.CFrame = originalCFrame
+    task.wait(0.1)
+    
+    spamTask = task.spawn(function()
+        while spamGrabEnabled do
+            if not selectedTarget or not selectedTarget.Character then 
+                task.wait(0.1) 
+                continue 
+            end
+            
+            local hrp = selectedTarget.Character:FindFirstChild("HumanoidRootPart")
+            local myHrpNow = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            
+            if hrp and myHrpNow then
+                pcall(function()
+                    local targetPos = myHrpNow.Position + Vector3.new(0, holdHeight, 0)
+                    hrp.CFrame = CFrame.new(targetPos)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                    
+                    for i = 1, 5 do
+                        SetNetworkOwner:FireServer(hrp, hrp.CFrame)
+                        DestroyGrabLine:FireServer(hrp)
+                        CreateGrabLine:FireServer(hrp, Vector3.zero, hrp.Position, false)
+                    end
+                end)
+            end
+            
+            task.wait()
+        end
+    end)
+end
+
+local function StopSpamGrab()
+    spamGrabEnabled = false
+    if spamTask then
+        task.cancel(spamTask)
+        spamTask = nil
+    end
+end
+
+local function AntiGrabLoop()
+    while antiGrabEnabled do
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            
+            if isHeld.Value then
+                pcall(function()
+                    struggleEvent:FireServer(LocalPlayer)
+                end)
+                
+                for _, v in pairs(char:GetChildren()) do
+                    if v:IsA("BasePart") and v:FindFirstChild("BallSocketConstraint") and v.Name ~= "Head" then
+                        v.BallSocketConstraint.Enabled = false
+                        if v:FindFirstChild("RagdollLimbPart") then
+                            v.RagdollLimbPart.WeldConstraint.Enabled = false
+                        end
+                    end
+                end
+                
+                if hrp then
+                    hrp.Anchored = true
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                end
+                
+                if hum then
+                    hum.Sit = false
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+                end
+                
+                local head = char:FindFirstChild("Head")
+                if head then
+                    local partOwner = head:FindFirstChild("PartOwner")
+                    if partOwner then partOwner:Destroy() end
+                end
+                
+                if hrp then
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 50, 0)
+                end
+                
+                pcall(function()
+                    RS.CharacterEvents.RagdollRemote:FireServer(hrp, 0)
+                end)
+            else
+                if hrp then
+                    hrp.Anchored = false
+                end
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
+end
+
+local SpamGrabBtn
+SpamGrabBtn = GrabBlock:CreateToggle({
+    Name = "Spam Grab / Kick",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            if not selectedTarget then
+                Library:Notify({ Title = "Error", Content = "Select target first", Duration = 3 })
+                return
+            end
+            spamGrabEnabled = true
+            task.spawn(SpamGrabLoop)
+            Library:Notify({ Title = "Spam Grab", Content = "Enabled", Duration = 2 })
+        else
+            StopSpamGrab()
+            Library:Notify({ Title = "Spam Grab", Content = "Disabled", Duration = 2 })
+        end
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Spam Interval",
+    Min = 0.001,
+    Max = 0.05,
+    Default = 0.001,
+    Rounding = 5,
+    Callback = function(Value)
+        grabInterval = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Hold Height",
+    Min = 5,
+    Max = 30,
+    Default = 15,
+    Rounding = 0,
+    Callback = function(Value)
+        holdHeight = Value
+    end
+})
+
+local AntiGrabBtn
+AntiGrabBtn = AntiGrabBlock:CreateToggle({
+    Name = "Anti-Grab",
+    Default = false,
+    Callback = function(Value)
+        antiGrabEnabled = Value
+        if antiGrabTask then
+            task.cancel(antiGrabTask)
+            antiGrabTask = nil
+        end
+        if Value then
+            antiGrabTask = task.spawn(AntiGrabLoop)
+            Library:Notify({ Title = "Anti-Grab", Content = "Enabled", Duration = 2 })
+        else
+            local char = LocalPlayer.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.Anchored = false end
+            end
+            Library:Notify({ Title = "Anti-Grab", Content = "Disabled", Duration = 2 })
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        updateList()
+        if TargetDropdown then
+            pcall(function()
+                TargetDropdown:Refresh(targetNames, true)
+            end)
+        end
+        task.wait(5)
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if antiGrabEnabled then
+        antiGrabTask = task.spawn(AntiGrabLoop)
+    end
+end)
+
+LocalPlayer.OnTeleport:Connect(function()
+    StopSpamGrab()
+    antiGrabEnabled = false
+    if antiGrabTask then
+        task.cancel(antiGrabTask)
+        antiGrabTask = nil
+    end
+end)
