@@ -121,21 +121,21 @@ end)
 
 -- Обработка отправки
 TextBox.FocusLost:Connect(function(enterPressed)
-    if TextBox.Text ~= "" then
+    if TextBox.Text ~= "" and enterPressed then
         local msg = TextBox.Text
         TextBox.Text = ""
         
         -- Сразу выводим сообщение у себя на экране (исправляет пустой чат)
         addMessage(LocalPlayer.Name, msg, true)
         
-        -- Отправляем пакет другим обладателям скрипта
+        -- Отправляем пакет на сервер (там он будет разослан всем)
         pcall(function()
             ChatRemote:FireServer(msg)
         end)
     end
 end)
 
--- Прием пакетов от других игроков
+-- Прием пакетов от других игроков через сервер
 ChatRemote.OnClientEvent:Connect(function(sender, msg)
     if typeof(sender) == "Instance" and sender:IsA("Player") and sender ~= LocalPlayer and typeof(msg) == "string" then
         addMessage(sender.Name, msg, false)
