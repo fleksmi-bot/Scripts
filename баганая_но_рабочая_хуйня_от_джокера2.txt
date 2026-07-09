@@ -38,6 +38,8 @@ local spamTask = nil
 local antiGrabTask = nil
 local holdHeight = 15
 local grabInterval = 0.01
+local kickPower = 200
+local kickDelay = 0.5
 
 local targetNames = {}
 local function updateList()
@@ -93,6 +95,7 @@ local function SpamGrabLoop()
     task.wait(0.1)
     
     spamTask = task.spawn(function()
+        local holdCounter = 0
         while spamGrabEnabled do
             if not selectedTarget or not selectedTarget.Character then 
                 task.wait(0.1) 
@@ -114,10 +117,30 @@ local function SpamGrabLoop()
                         DestroyGrabLine:FireServer(hrp)
                         CreateGrabLine:FireServer(hrp, Vector3.zero, hrp.Position, false)
                     end
+                    
+                    -- Счетчик для кика
+                    holdCounter = holdCounter + 1
+                    if holdCounter >= math.ceil(kickDelay / grabInterval) then
+                        -- ФАЗА КИКА - применяем силу для выброса
+                        hrp.AssemblyLinearVelocity = Vector3.new(
+                            math.random(-kickPower/2, kickPower/2),
+                            kickPower * 0.8,
+                            -kickPower
+                        )
+                        
+                        -- Угловая скорость для спина
+                        hrp.AssemblyAngularVelocity = Vector3.new(
+                            math.random(-50, 50),
+                            math.random(-50, 50),
+                            math.random(-50, 50)
+                        )
+                        
+                        holdCounter = 0
+                    end
                 end)
             end
             
-            task.wait()
+            task.wait(grabInterval)
         end
     end)
 end
@@ -225,6 +248,28 @@ SettingsBlock:CreateSlider({
     Rounding = 0,
     Callback = function(Value)
         holdHeight = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Kick Power",
+    Min = 50,
+    Max = 500,
+    Default = 200,
+    Rounding = 0,
+    Callback = function(Value)
+        kickPower = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Kick Delay",
+    Min = 0.1,
+    Max = 2,
+    Default = 0.5,
+    Rounding = 2,
+    Callback = function(Value)
+        kickDelay = Value
     end
 })
 
