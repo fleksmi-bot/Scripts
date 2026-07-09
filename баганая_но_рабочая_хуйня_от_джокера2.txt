@@ -15,13 +15,17 @@ local Window = Library:CreateWindow({
 	ConfigFolder = "Fling_config"
 })
 
-local MainTab = Window:CreateTab("Main", true)
-local DefenseTab = Window:CreateTab("Defense", true)
+-- Создаем отдельные вкладки для каждой функции
+local SpamGrabTab = Window:CreateTab("Spam Grab", true)
+local TargetTab = Window:CreateTab("Target", true)
+local SettingsTab = Window:CreateTab("Settings", true)
+local AntiGrabTab = Window:CreateTab("Anti-Grab", true)
 
-local GrabBlock = MainTab:CreateBlock({Name = "Spam Grab", Side = "Left"})
-local TargetBlock = MainTab:CreateBlock({Name = "Target", Side = "Left"})
-local SettingsBlock = MainTab:CreateBlock({Name = "Settings", Side = "Left"})
-local AntiGrabBlock = DefenseTab:CreateBlock({Name = "Anti-Grab", Side = "Left"})
+-- Блоки для каждой вкладки
+local GrabBlock = SpamGrabTab:CreateBlock({Name = "Spam Grab / Kick", Side = "Left"})
+local TargetBlock = TargetTab:CreateBlock({Name = "Target Selection", Side = "Left"})
+local SettingsBlock = SettingsTab:CreateBlock({Name = "Advanced Settings", Side = "Left"})
+local AntiGrabBlock = AntiGrabTab:CreateBlock({Name = "Anti-Grab Protection", Side = "Left"})
 
 local GrabEvents = RS:WaitForChild("GrabEvents")
 local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
@@ -51,6 +55,7 @@ local function updateList()
     end
 end
 
+-- TARGET TAB
 local TargetDropdown = TargetBlock:CreateDropdown({
     Name = "Select Target",
     Options = targetNames,
@@ -67,6 +72,9 @@ TargetBlock:CreateButton({
     end
 })
 
+TargetBlock:CreateLabel("Current Target: " .. (selectedTarget and selectedTarget.Name or "None"))
+
+-- SPAM GRAB TAB
 local function SpamGrabLoop()
     local myChar = LocalPlayer.Character
     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -153,6 +161,76 @@ local function StopSpamGrab()
     end
 end
 
+local SpamGrabBtn
+SpamGrabBtn = GrabBlock:CreateToggle({
+    Name = "Spam Grab / Kick",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            if not selectedTarget then
+                Library:Notify({ Title = "Error", Content = "Select target first", Duration = 3 })
+                return
+            end
+            spamGrabEnabled = true
+            task.spawn(SpamGrabLoop)
+            Library:Notify({ Title = "Spam Grab", Content = "Enabled", Duration = 2 })
+        else
+            StopSpamGrab()
+            Library:Notify({ Title = "Spam Grab", Content = "Disabled", Duration = 2 })
+        end
+    end
+})
+
+GrabBlock:CreateLabel("Status: Ready")
+
+-- SETTINGS TAB
+SettingsBlock:CreateSlider({
+    Name = "Spam Interval",
+    Min = 0.001,
+    Max = 0.05,
+    Default = 0.001,
+    Rounding = 5,
+    Callback = function(Value)
+        grabInterval = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Hold Height",
+    Min = 5,
+    Max = 30,
+    Default = 15,
+    Rounding = 0,
+    Callback = function(Value)
+        holdHeight = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Kick Power",
+    Min = 50,
+    Max = 500,
+    Default = 200,
+    Rounding = 0,
+    Callback = function(Value)
+        kickPower = Value
+    end
+})
+
+SettingsBlock:CreateSlider({
+    Name = "Kick Delay",
+    Min = 0.1,
+    Max = 2,
+    Default = 0.5,
+    Rounding = 2,
+    Callback = function(Value)
+        kickDelay = Value
+    end
+})
+
+SettingsBlock:CreateLabel("Adjust settings for optimal performance")
+
+-- ANTI-GRAB TAB
 local function AntiGrabLoop()
     while antiGrabEnabled do
         local char = LocalPlayer.Character
@@ -209,73 +287,9 @@ local function AntiGrabLoop()
     end
 end
 
-local SpamGrabBtn
-SpamGrabBtn = GrabBlock:CreateToggle({
-    Name = "Spam Grab / Kick",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            if not selectedTarget then
-                Library:Notify({ Title = "Error", Content = "Select target first", Duration = 3 })
-                return
-            end
-            spamGrabEnabled = true
-            task.spawn(SpamGrabLoop)
-            Library:Notify({ Title = "Spam Grab", Content = "Enabled", Duration = 2 })
-        else
-            StopSpamGrab()
-            Library:Notify({ Title = "Spam Grab", Content = "Disabled", Duration = 2 })
-        end
-    end
-})
-
-SettingsBlock:CreateSlider({
-    Name = "Spam Interval",
-    Min = 0.001,
-    Max = 0.05,
-    Default = 0.001,
-    Rounding = 5,
-    Callback = function(Value)
-        grabInterval = Value
-    end
-})
-
-SettingsBlock:CreateSlider({
-    Name = "Hold Height",
-    Min = 5,
-    Max = 30,
-    Default = 15,
-    Rounding = 0,
-    Callback = function(Value)
-        holdHeight = Value
-    end
-})
-
-SettingsBlock:CreateSlider({
-    Name = "Kick Power",
-    Min = 50,
-    Max = 500,
-    Default = 200,
-    Rounding = 0,
-    Callback = function(Value)
-        kickPower = Value
-    end
-})
-
-SettingsBlock:CreateSlider({
-    Name = "Kick Delay",
-    Min = 0.1,
-    Max = 2,
-    Default = 0.5,
-    Rounding = 2,
-    Callback = function(Value)
-        kickDelay = Value
-    end
-})
-
 local AntiGrabBtn
 AntiGrabBtn = AntiGrabBlock:CreateToggle({
-    Name = "Anti-Grab",
+    Name = "Anti-Grab Protection",
     Default = false,
     Callback = function(Value)
         antiGrabEnabled = Value
@@ -297,6 +311,9 @@ AntiGrabBtn = AntiGrabBlock:CreateToggle({
     end
 })
 
+AntiGrabBlock:CreateLabel("Protects you from grab attacks")
+
+-- Background tasks
 task.spawn(function()
     while true do
         updateList()
