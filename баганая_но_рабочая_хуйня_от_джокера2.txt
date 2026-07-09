@@ -20,12 +20,14 @@ local SpamGrabTab = Window:CreateTab("Spam Grab", true)
 local TargetTab = Window:CreateTab("Target", true)
 local SettingsTab = Window:CreateTab("Settings", true)
 local AntiGrabTab = Window:CreateTab("Anti-Grab", true)
+local ChatTab = Window:CreateTab("Chat", true)
 
 -- Блоки для каждой вкладки
 local GrabBlock = SpamGrabTab:CreateBlock({Name = "Spam Grab / Kick", Side = "Left"})
 local TargetBlock = TargetTab:CreateBlock({Name = "Target Selection", Side = "Left"})
 local SettingsBlock = SettingsTab:CreateBlock({Name = "Advanced Settings", Side = "Left"})
 local AntiGrabBlock = AntiGrabTab:CreateBlock({Name = "Anti-Grab Protection", Side = "Left"})
+local ChatBlock = ChatTab:CreateBlock({Name = "Script Chat", Side = "Left"})
 
 local GrabEvents = RS:WaitForChild("GrabEvents")
 local SetNetworkOwner = GrabEvents:WaitForChild("SetNetworkOwner")
@@ -34,6 +36,113 @@ local CreateGrabLine = GrabEvents:WaitForChild("CreateGrabLine")
 local isHeld = LocalPlayer:WaitForChild("IsHeld")
 local struggleEvent = RS:WaitForChild("CharacterEvents"):WaitForChild("Struggle")
 local ragdollRemote = RS:WaitForChild("CharacterEvents"):WaitForChild("RagdollRemote")
+
+-- ===== CHAT SYSTEM (АВТОМАТИЧЕСКИЙ) =====
+local chatMessages = {}
+local maxMessages = 50
+local chatInput = ""
+
+-- Создаем RemoteEvent для чата если его нет
+local chatEvent = RS:FindFirstChild("ScriptChatEvent")
+if not chatEvent then
+	chatEvent = Instance.new("RemoteEvent")
+	chatEvent.Name = "ScriptChatEvent"
+	chatEvent.Parent = RS
+end
+
+-- Функция отправки сообщения в чат
+local function SendChatMessage(message)
+	if message and message ~= "" then
+		table.insert(chatMessages, {
+			Player = LocalPlayer.Name,
+			Message = message,
+			Time = os.date("%H:%M:%S")
+		})
+		if #chatMessages > maxMessages then
+			table.remove(chatMessages, 1)
+		end
+		pcall(function()
+			chatEvent:FireAllClients(LocalPlayer.Name, message, os.date("%H:%M:%S"))
+		end)
+	end
+end
+
+-- Обновление отображения чата
+local function UpdateChatDisplay()
+	local chatText = ""
+	for _, msg in pairs(chatMessages) do
+		chatText = chatText .. "[" .. msg.Time .. "] " .. msg.Player .. ": " .. msg.Message .. "\n"
+	end
+	-- Отправляем на обновление блока чата
+	return chatText
+end
+
+-- Получение сообщений из чата
+local function OnChatMessageReceived(playerName, message, time)
+	table.insert(chatMessages, {
+		Player = playerName,
+		Message = message,
+		Time = time
+	})
+	if #chatMessages > maxMessages then
+		table.remove(chatMessages, 1)
+	end
+end
+
+-- Подключаемся к событию чата (автоматически слушаем)
+if chatEvent then
+	chatEvent.OnClientEvent:Connect(function(playerName, message, time)
+		OnChatMessageReceived(playerName, message, time)
+	end)
+end
+
+-- ===== CHAT TAB INTERFACE =====
+ChatBlock:CreateLabel("📝 Script Chat (Auto-running)\n")
+
+local chatInput = ""
+ChatBlock:CreateTextBox({
+	Name = "Message",
+	PlaceHolder = "Type message and press Send...",
+	Callback = function(value)
+		chatInput = value
+	end
+})
+
+ChatBlock:CreateButton({
+	Name = "Send Message",
+	Callback = function()
+		if chatInput and chatInput ~= "" then
+			SendChatMessage(chatInput)
+			chatInput = ""
+			Library:Notify({ Title = "Chat", Content = "Message sent to all users!", Duration = 2 })
+		end
+	end
+})
+
+ChatBlock:CreateButton({
+	Name = "Clear Chat History",
+	Callback = function()
+		chatMessages = {}
+		Library:Notify({ Title = "Chat", Content = "Chat cleared", Duration = 2 })
+	end
+})
+
+ChatBlock:CreateLabel("\n--- Chat Messages ---\n")
+
+-- Обновляем отображение чата каждые 0.5 секунды
+task.spawn(function()
+	while true do
+		local chatDisplay = UpdateChatDisplay()
+		if chatDisplay and chatDisplay ~= "" then
+			pcall(function()
+				ChatBlock:CreateLabel(chatDisplay)
+			end)
+		end
+		task.wait(0.5)
+	end
+end)
+
+-- ===== END CHAT SYSTEM =====
 
 local selectedTarget = nil
 local spamGrabEnabled = false
