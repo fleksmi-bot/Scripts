@@ -1,1 +1,143 @@
+local REMOTE_NAME = "FTAP_ChatEvent" 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
 
+-- Поиск или создание RemoteEvent
+local ChatRemote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
+if not ChatRemote then
+    ChatRemote = Instance.new("RemoteEvent")
+    ChatRemote.Name = REMOTE_NAME
+    ChatRemote.Parent = ReplicatedStorage
+end
+
+-- Основной контейнер GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FTAP_RobloxStyleChat"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Кнопка переключения (как иконка чата Roblox сверху слева)
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 32, 0, 32)
+ToggleButton.Position = UDim2.new(0, 15, 0, 15)
+ToggleButton.Text = "💬"
+ToggleButton.TextSize = 16
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ToggleButton.BackgroundTransparency = 0.5
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Parent = ScreenGui
+
+local UICorner_Toggle = Instance.new("UICorner")
+UICorner_Toggle.CornerRadius = UDim.new(0, 6)
+UICorner_Toggle.Parent = ToggleButton
+
+-- Главное прозрачное окно чата (Размеры адаптированы под ПК и Мобилки)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 360, 0, 190)
+MainFrame.Position = UDim2.new(0, 15, 0, 55)
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MainFrame.BackgroundTransparency = 0.65 -- Прозрачный фон как в оригинале
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+
+local UICorner_Main = Instance.new("UICorner")
+UICorner_Main.CornerRadius = UDim.new(0, 8)
+UICorner_Main.Parent = MainFrame
+
+-- Прокрутка сообщений
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(1, -20, 1, -50)
+ScrollingFrame.Position = UDim2.new(0, 10, 0, 10)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollingFrame.ScrollBarThickness = 3
+ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+ScrollingFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 4)
+UIListLayout.Parent = ScrollingFrame
+
+-- Поле ввода сообщений (Нижняя прозрачная плашка)
+local TextBox = Instance.new("TextBox")
+TextBox.Size = UDim2.new(1, -20, 0, 30)
+TextBox.Position = UDim2.new(0, 10, 1, -40)
+TextBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+TextBox.BackgroundTransparency = 0.5
+TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextBox.Text = ""
+TextBox.PlaceholderText = "Нажмите сюда для ввода..."
+TextBox.PlaceholderColor3 = Color3.fromRGB(200, 200, 200)
+TextBox.TextSize = 14
+TextBox.TextXAlignment = Enum.TextXAlignment.Left
+TextBox.Font = Enum.Font.SourceSansBold
+TextBox.ClearTextOnFocus = false
+TextBox.Parent = MainFrame
+
+local UICorner_Box = Instance.new("UICorner")
+UICorner_Box.CornerRadius = UDim.new(0, 6)
+UICorner_Box.Parent = TextBox
+
+local UIPadding_Box = Instance.new("UIPadding")
+UIPadding_Box.PaddingLeft = UDim.new(0, 10)
+UIPadding_Box.Parent = TextBox
+
+-- Защита интерфейса от удаления
+if gethui then ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then syn.protect_gui(ScreenGui); ScreenGui.Parent = game:GetService("CoreGui")
+else ScreenGui.Parent = game:GetService("CoreGui") end
+
+-- Функция отрисовки сообщений
+local function addMessage(senderName, messageText, isLocal)
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Size = UDim2.new(1, 0, 0, 20)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Font = Enum.Font.SourceSansBold
+    TextLabel.TextSize = 16
+    TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TextLabel.RichText = true
+    
+    -- Белый текст, цветные ники и легкая тень для читаемости на любом фоне
+    local nameColor = isLocal and "rgb(100, 210, 255)" or "rgb(255, 180, 50)"
+    TextLabel.Text = string.format("<font color='%s'>[%s]</font>: <font color='rgb(255,255,255)'>%s</font>", nameColor, senderName, messageText)
+    TextLabel.TextStrokeTransparency = 0.75
+    TextLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    
+    TextLabel.Parent = ScrollingFrame
+    
+    -- Автоматический скролл вниз
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y)
+    ScrollingFrame.CanvasPosition = Vector2.new(0, UIListLayout.AbsoluteContentSize.Y)
+end
+
+-- Переключение чата по кнопке
+ToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- Обработка отправки
+TextBox.FocusLost:Connect(function(enterPressed)
+    if TextBox.Text ~= "" then
+        local msg = TextBox.Text
+        TextBox.Text = ""
+        
+        -- Сразу выводим сообщение у себя на экране (исправляет пустой чат)
+        addMessage(LocalPlayer.Name, msg, true)
+        
+        -- Отправляем пакет другим обладателям скрипта
+        pcall(function()
+            ChatRemote:FireServer(msg)
+        end)
+    end
+end)
+
+-- Прием пакетов от других игроков
+ChatRemote.OnClientEvent:Connect(function(sender, msg)
+    if typeof(sender) == "Instance" and sender:IsA("Player") and sender ~= LocalPlayer and typeof(msg) == "string" then
+        addMessage(sender.Name, msg, false)
+    end
+end)
